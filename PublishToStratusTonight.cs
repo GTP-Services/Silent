@@ -83,30 +83,26 @@ namespace Utilities
      /// If you publish late at night, first make sure nobody has changes
      /// you haven't merged into your model
      /// -------------------------------------------------------------
-     private void SyncAndSave()
+     public void SyncAndSave()
      {
        try
        {
          Document doc = this.ActiveUIDocument.Document;
-         SynchronizeWithCentralOptions syncOptions = new SynchronizeWithCentralOptions();
-         RelinquishOptions relinquishOptions = new RelinquishOptions(true);
-         relinquishOptions.StandardWorksets = true;
-         relinquishOptions.ViewWorksets = true;
-         relinquishOptions.FamilyWorksets = true;
-         relinquishOptions.UserWorksets = true;
-         relinquishOptions.CheckedOutElements = true;
-
-         TransactWithCentralOptions transactOptions = new TransactWithCentralOptions();
-         syncOptions.SetRelinquishOptions(relinquishOptions);
-
-         doc.SynchronizeWithCentral(transactOptions, syncOptions);
-         doc.Save();
+         if (doc.IsWorkshared)
+         {
+            SynchronizeWithCentralOptions syncOptions = new SynchronizeWithCentralOptions();
+            RelinquishOptions relinquishOptions = new RelinquishOptions(true); // relinquish everything
+            TransactWithCentralOptions transactOptions = new TransactWithCentralOptions();
+            syncOptions.SetRelinquishOptions(relinquishOptions);
+            doc.SynchronizeWithCentral(transactOptions, syncOptions);
+            doc.Save();
+         }
        }
        catch (Exception ex)
        {
           TaskDialog.Show("Error", "An error occurred: " + ex.Message);
        }
-     } 
+     }  
 
      /// -------------------------------------------------------------
      /// This is the Timer function that gets called once ever so often
