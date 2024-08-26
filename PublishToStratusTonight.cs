@@ -1,5 +1,5 @@
 /*
- * Invented by Frank Scott. Written by S. Rives, F. Scott and Chat GTP
+ * Invented by Frank Scott. Written by S. Rives and F. Scott
  * User: GTP Innovate 2024
  * Date: 8/24/2024
  * Time: 3:00 PM
