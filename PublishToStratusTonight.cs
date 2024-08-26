@@ -1,13 +1,10 @@
 /*
- * Created inside SharpDevelop.
+ * Created by SharpDevelop.
  * User: GTP Innovate 2024
  * Date: 8/24/2024
  * Time: 3:00 PM
  *
- *         Before you run this Macro, you must LOG IN to Stratus and Revit-Stratus (both places).
- *               1. You must log into gtpstratus.com, and switch to the company you want to publish to
- *               2. In Revit, go to Add Ins, Help, Sign-out
- *               3. In Revit, go to Add Ins, External Tools, Stratus Set Project Info (this will prompt the login, after that just cancel out of the dialog)
+ *        A macro to publish your model to Stratus on a schedule, will Sync and Save before publish
  * 
  * To change this template use Tools | Options | Coding | Edit Standard Headers.
  */
@@ -58,7 +55,8 @@ namespace Utilities
          // If we are already running a scheduler, then ask them if they want to cancel it.
          if (_scheduler.Enabled)
          {
-            var select = TaskDialog.Show("Already Scheduled to Publish", "Would you like to cancel the scheduled publish?", TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No);            
+            var select = TaskDialog.Show("Already Scheduled to Publish", "Would you like to cancel the publish scheduled for military hour " + _hourToPublish + "?", 
+					 TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No);
             if (select == TaskDialogResult.Yes)
             {
                SetThreadExecutionState(1); // Turn off Stay Awake
@@ -69,6 +67,10 @@ namespace Utilities
 
          // Ask them if they really want to schedule a silent publish (show them YES and NO buttons)
          var doIt = TaskDialog.Show("Continue?", 
+				    "Before you run this Macro, you must LOG IN to Stratus and Revit-Stratus (both places).\r\n" +
+                                    "    1. You must log into gtpstratus.com, and switch to the company you want to publish to\r\n" +
+                                    "    2. In Revit, go to Add Ins, Help, Sign-out\r\n" +
+                                    "    3. In Revit, go to Add Ins, External Tools, Stratus Set Project Info (this will prompt the login, after that just cancel out of the dialog)\r\n\r\n" +
                                     "Would you like to schedule a silent publish for military hour " + _hourToPublish + "?",
                                      TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No);
 
@@ -78,7 +80,36 @@ namespace Utilities
              _scheduler.Start();                  // Start the scheduler, which will check to see when it is the _hourToPublish (see SchedulerCallback)
          }
      }
-		
+
+     /// -------------------------------------------------------------
+     /// If you publish late at night, first make sure nobody has changes
+     /// you haven't merged into your model
+     /// -------------------------------------------------------------
+     private void SyncAndSave()
+     {
+       try
+       {
+         Document doc = this.ActiveUIDocument.Document;
+         SynchronizeWithCentralOptions syncOptions = new SynchronizeWithCentralOptions();
+         RelinquishOptions relinquishOptions = new RelinquishOptions(true);
+         relinquishOptions.StandardWorksets = true;
+         relinquishOptions.ViewWorksets = true;
+         relinquishOptions.FamilyWorksets = true;
+         relinquishOptions.UserWorksets = true;
+         relinquishOptions.CheckedOutElements = true;
+
+         TransactWithCentralOptions transactOptions = new TransactWithCentralOptions();
+         syncOptions.SetRelinquishOptions(relinquishOptions);
+
+         doc.SynchronizeWithCentral(transactOptions, syncOptions);
+         doc.Save();
+       }
+       catch (Exception ex)
+       {
+          TaskDialog.Show("Error", "An error occurred: " + ex.Message);
+       }
+     } 
+
      /// -------------------------------------------------------------
      /// This is the Timer function that gets called once ever so often
      /// and checks to see if we have hit the desired hour of the day
@@ -88,7 +119,8 @@ namespace Utilities
      {			
         if (_scheduler.Enabled && DateTime.Now.Hour == _hourToPublish) // 22 = 10pm military time
         {
-          _scheduler.Stop();				
+          _scheduler.Stop();
+          SyncAndSave();
           RunSilentPublishNow();
           SetThreadExecutionState(1); // no longer try to keep the computer from sleeping
         }
