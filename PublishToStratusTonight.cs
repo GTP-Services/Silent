@@ -65,7 +65,7 @@ namespace Utilities
 
          // Ask them if they really want to schedule a silent publish (show them YES and NO buttons)
          var doIt = TaskDialog.Show("Continue?", 
-                				    "Before you run this Macro:\r\n" +
+				    "Before you run this Macro:\r\n" +
                                     " 1. Log into gtpstratus.com\r\n" +
                                     " 2. Switch to the company you want to publish to\r\n" +
                                     "    (this is only relevant if you have a Sandbox company)\r\n" +
