@@ -5,6 +5,7 @@
  * Time: 3:00 PM
  *
  *        A macro to publish your model to Stratus on a schedule, will Sync and Save before publish
+ * 
  */
 using System;
 using Autodesk.Revit.UI;
@@ -20,7 +21,10 @@ namespace Utilities
     [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
     [Autodesk.Revit.DB.Macros.AddInId("0962CE0E-1BAE-4461-8737-E4F3F4451ED5")]
     public partial class ThisApplication
-    {			
+    {
+      [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)] // Turn on/off Windows Sleep
+      static extern uint SetThreadExecutionState(uint esFlags); 
+	    
       private int _hourToPublish = 22; // 22 = 10pm military time
       private Timer _scheduler;
       private void Module_Startup(object sender, EventArgs e)
@@ -42,12 +46,27 @@ namespace Utilities
       }
       #endregion
 
-      [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)] // Turn on/off Windows Sleep
-      static extern uint SetThreadExecutionState(uint esFlags);            
-
+      /// <summary>
+      /// -------------------------------------------------------------
+      /// MACRO ENTRY POINT -- search logs for last publish
+      /// -------------------------------------------------------------
+      /// </summary>
+      public void ShowLastSuccessfulSilentPublish()
+      {
+      	for (int i = 0; i < 20; i++)
+        {
+           if (CheckLogsForSilentPublish(DateTime.MinValue, true, i, false))
+           {
+              break;
+           }     		
+     	}
+      }
+      
+      /// <summary>
       /// -------------------------------------------------------------
       /// MACRO ENTRY POINT -- show all the custom data in all your parts
       /// -------------------------------------------------------------	    
+      /// </summary>
       public void ShowAllPartCustomData()
       {
         Document doc = ActiveUIDocument.Document;
@@ -60,9 +79,11 @@ namespace Utilities
         }
         TaskDialog.Show("Custom Data", CDList);
      }
-	    
+		
       /// <summary>
+      /// -------------------------------------------------------------
       /// MACRO ENTRY POINT -- Revit calls into here
+      /// -------------------------------------------------------------
       /// </summary>
       public void PublishToStratusTonight()
       {		
@@ -104,7 +125,7 @@ namespace Utilities
      /// If you publish late at night, first make sure nobody has changes
      /// you haven't merged into your model
      /// -------------------------------------------------------------
-     public void SyncAndSave()
+     private void SyncAndSave()
      {
        try
        {
@@ -123,8 +144,8 @@ namespace Utilities
        {
           TaskDialog.Show("Error", "An error occurred: " + ex.Message);
        }
-     }  
-
+     } 
+	    
      /// -------------------------------------------------------------
      /// This is the Timer function that gets called once ever so often
      /// and checks to see if we have hit the desired hour of the day
@@ -137,10 +158,98 @@ namespace Utilities
           _scheduler.Stop();
           SyncAndSave();
           RunSilentPublishNow();
+          // CheckLogsForSilentPublish(pubTime);
           SetThreadExecutionState(1); // no longer try to keep the computer from sleeping
         }
      }
-
+	    
+     private DateTime GetDateTime(string line, DateTime def)
+     {
+     	if (string.IsNullOrEmpty(line))
+     	{
+           return def;
+     	}
+     	var parts = line.Split('[');
+     	if (parts.Length > 0)
+     	{
+           DateTime res;
+           if (DateTime.TryParse(parts[0], out res))
+           {
+             return res;
+           }
+     	}
+     	return def;
+     }
+	    
+     // -------------------------------------------------------------
+     // Walk through the latest log for the current model
+     // -------------------------------------------------------------
+     private bool CheckLogsForSilentPublish(DateTime pubTime, bool verbose=false, int ct=0, bool showCrashError=true)
+     {
+       var msgBoxShown = false;
+       try
+       {
+         var silent = false;
+     	 var errorMsg = string.Empty;
+     	 var silentLine = string.Empty;
+     	 
+         Document doc = this.ActiveUIDocument.Document;
+         var name = doc.Title;
+         
+         var log = Environment.GetEnvironmentVariable("APPDATA") + "\\GTP Software Inc\\STRATUS Logs\\Revit\\Log - " + name + " - Extract.txt";
+         if (ct > 0)
+         {
+           log += "." + ct;
+         }
+         if (System.IO.File.Exists(log))
+         {
+            var lines = System.IO.File.ReadAllLines(log);
+            if (lines != null && lines.Length > 0)
+            {
+               var rev = lines.Reverse();
+               foreach(var line in rev)
+               {
+               	  var dt = GetDateTime(line, pubTime);
+               	  if (dt < pubTime)
+               	  {
+               	     break;
+               	  }
+                  if (line.Contains("IN SILENT MODE"))
+                  {
+                  	 silentLine = line;
+                     silent = true;
+               	     break;
+                  }
+                  if (line.Contains("ERROR"))
+                  {
+                  	 errorMsg += line + "\r\n";
+                  }
+               }
+            }
+         }
+         if (silent == true && !string.IsNullOrEmpty(errorMsg))
+         {
+            msgBoxShown = true;
+            errorMsg += "\r\n" + log;
+         	MessageBox.Show(errorMsg, "Email this: " + name);
+         }
+         else if (silent == true && verbose)
+         {
+            msgBoxShown = true;
+            silentLine += "\r\n\r\n" + log;
+         	MessageBox.Show(silentLine, "Silent Publish Success: " + name);
+         }
+       }
+       catch (Exception ex)
+       {
+       	 if (showCrashError)
+       	 {
+       	   MessageBox.Show(ex.Message, "Failed");
+       	 }
+       }
+       return msgBoxShown;
+     }
+	    
      /// -------------------------------------------------------------
      /// This is the function that does the actual Silent Publish 
      /// command. This will get called by the scheduler at the right
@@ -162,6 +271,6 @@ namespace Utilities
         {
             TaskDialog.Show("Publish to Stratus Tonight", "ERROR: Could not launch silent publish: " + ex.Message);
         }
-     }	    
+     }
    }
 }
