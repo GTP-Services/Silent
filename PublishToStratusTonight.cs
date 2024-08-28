@@ -44,7 +44,23 @@ namespace Utilities
 
       [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)] // Turn on/off Windows Sleep
       static extern uint SetThreadExecutionState(uint esFlags);            
-		
+
+     /// -------------------------------------------------------------
+     /// MACRO ENTRY POINT -- show all the custom data in all your parts
+     /// -------------------------------------------------------------	    
+     public void ShowAllPartCustomData()
+     {
+        Document doc = ActiveUIDocument.Document;
+        var conf = FabricationConfiguration.GetFabricationConfiguration(doc);
+        var confCD = conf.GetAllPartCustomData();
+        string CDList = "";
+        foreach(int cdint in confCD)            
+        {
+           CDList = CDList +"ID "+ cdint.ToString() +": "+ conf.GetPartCustomDataName(cdint).ToString()+"\n";
+	}
+        TaskDialog.Show("Custom Data", CDList);
+     }
+	    
       /// <summary>
       /// MACRO ENTRY POINT -- Revit calls into here
       /// </summary>
@@ -146,6 +162,6 @@ namespace Utilities
         {
             TaskDialog.Show("Publish to Stratus Tonight", "ERROR: Could not launch silent publish: " + ex.Message);
         }
-     }
+     }	    
    }
 }
