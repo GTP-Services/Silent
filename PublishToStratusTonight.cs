@@ -136,8 +136,8 @@ namespace Utilities
             RelinquishOptions relinquishOptions = new RelinquishOptions(true); // relinquish everything
             TransactWithCentralOptions transactOptions = new TransactWithCentralOptions();
             syncOptions.SetRelinquishOptions(relinquishOptions);
-            doc.SynchronizeWithCentral(transactOptions, syncOptions);
             doc.Save();
+            doc.SynchronizeWithCentral(transactOptions, syncOptions);
          }
        }
        catch (Exception ex)
