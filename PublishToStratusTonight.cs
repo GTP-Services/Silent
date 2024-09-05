@@ -32,6 +32,7 @@ namespace Utilities
          _scheduler = new Timer();
          _scheduler.Interval = 1000; // 1000 = 1 second. Eevery second, check to see if it is time to publish.       
          _scheduler.Tick += SchedulerCallback;
+         _forceCheckoutWorksets = ForceCheckoutWorksets();	      
       }
 		  
       private void Module_Shutdown(object sender, EventArgs e)
