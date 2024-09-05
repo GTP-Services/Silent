@@ -26,7 +26,7 @@ namespace Utilities
       static extern uint SetThreadExecutionState(uint esFlags); 
 	    
       private int _hourToPublish = 22; // 22 = 10pm military time
-      private Timer _scheduler;
+      private Timer _scheduler;   
       private void Module_Startup(object sender, EventArgs e)
       {		
          _scheduler = new Timer();
@@ -46,6 +46,59 @@ namespace Utilities
       }
       #endregion
 
+      private bool _forceCheckoutWorksets = false;
+      string _settingsFileName = Environment.GetEnvironmentVariable("APPDATA") + "\\GTP Software Inc\\STRATUS\\settings.json";
+
+      /// <summary>
+      /// Check settings.json to see if Import.ForceCheckoutWorksets is true.
+      /// If enableSetting == true, then update settings.json set Import.ForceCheckoutWorksets=true;
+      /// Only works if settings.json is pretty printed and there is an existing Import section
+      /// </summary>
+      private bool ForceCheckoutWorksets(bool enableSetting=false)
+      {        
+         var forceCheckoutWorksets = -1; // -1 means we did not find ForceCheckoutWorksets in Settings.xml
+         var insertHere = -1; // -1 means we did not find an Import section in Settings.xml
+         var theSetting = Environment.NewLine + "    \"ForceCheckoutWorksets\": " + (enableSetting ? "true," : "false,");
+         try
+         {
+           var lines = System.IO.File.ReadAllLines(_settingsFileName);
+           for (var i = 0; i < lines.Length; i++)
+           {
+              if (lines[i].Contains("\"Import\"") && !lines[i].Contains("}"))
+              {
+                 insertHere = i;
+                 if (!lines[i].Contains("{")) insertHere++;                 
+              }
+              if (lines[i].Contains("ForceCheckoutWorksets"))
+              {
+                 forceCheckoutWorksets = i;
+              	 if (!lines[i].Contains("}"))
+              	 {
+                   if (lines[i].Contains("true")) return true;
+                   if (!enableSetting) return false; // they just want to know the current value
+                   if (enableSetting) lines[i]=lines[i].Replace("false", "true");
+              	}
+              }
+           }
+           if (forceCheckoutWorksets == -1 && insertHere > -1)
+           {
+              lines[insertHere] += theSetting;
+           }
+           if (enableSetting)
+           {
+              System.IO.File.WriteAllLines(_settingsFileName, lines);
+              return true;
+           }
+         }
+         catch
+         {
+         	MessageBox.Show("Manually update the file: " + Environment.NewLine + _settingsFileName + Environment.NewLine +
+                                "and add this to the Import section: " + theSetting + Environment.NewLine +
+                                "then restart Revit.", "Import: { ForceCheckoutWorksets }");
+         }
+         return false;
+      }
+	    
       /// <summary>
       /// -------------------------------------------------------------
       /// MACRO ENTRY POINT -- search logs for last publish
@@ -79,19 +132,56 @@ namespace Utilities
         }
         TaskDialog.Show("Custom Data", CDList);
      }
-		
+
+     // We return true if we updated Settings.Json and a restart of Revit is needed
+     private bool AskForceCheckoutWorksets()
+     {
+         var restartRevit = false;
+         if (!_forceCheckoutWorksets) // if the settings.Json file does NOT have ForceCheckoutWorksets = true, ask them about it
+         {
+            if (ForceCheckoutWorksets())
+            {
+               restartRevit = true;
+            }
+            else
+            {
+                var setting = TaskDialog.Show("Change Settings.json?", "The silent publish may fail by presenting you" + Environment.NewLine +
+						  "with dialog questions for which you won't be around to answer." + Environment.NewLine + Environment.NewLine +
+						  "To disable the Workset Checkout dialog, modify the following Stratus settings file:" + Environment.NewLine +
+						   Environment.NewLine +_settingsFileName + Environment.NewLine + Environment.NewLine +
+						   "and add this setting:" + Environment.NewLine +
+						   "     \"ForceCheckoutWorksets\": true " + Environment.NewLine +
+						   "to the \"Import\": section" + Environment.NewLine+
+						   Environment.NewLine + Environment.NewLine +
+						   "Would you like this macro to modify your Settings.json file for you?",
+						   TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No);
+	
+                if (setting == TaskDialogResult.Yes && ForceCheckoutWorksets(true))
+                {
+                  restartRevit = true;
+                }
+             }
+         }
+         if (restartRevit)
+         {
+             MessageBox.Show("Updated " + Environment.NewLine + _settingsFileName + Environment.NewLine +
+                            "You must restart Revit to continue.", "Restart Revit.");        
+         }
+         return restartRevit;
+      }
+	    
       /// <summary>
       /// -------------------------------------------------------------
       /// MACRO ENTRY POINT -- Revit calls into here
       /// -------------------------------------------------------------
       /// </summary>
       public void PublishToStratusTonight()
-      {		
+      {			      
          // If we are already running a scheduler, then ask them if they want to cancel it.
          if (_scheduler.Enabled)
          {
             var select = TaskDialog.Show("Already Scheduled to Publish", "Would you like to cancel the publish scheduled for military hour " + _hourToPublish + "?", 
-					 TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No);
+		                                 TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No);
             if (select == TaskDialogResult.Yes)
             {
                SetThreadExecutionState(1); // Turn off Stay Awake
@@ -99,13 +189,18 @@ namespace Utilities
             }
             return;
          }
-
+	      
+         if (AskForceCheckoutWorksets())
+         {
+            return;
+         }
+	      
          // Ask them if they really want to schedule a silent publish (show them YES and NO buttons)
          var doIt = TaskDialog.Show("Continue?", 
-				    "Before you run this Macro:\r\n" +
+                                    "Before you run this Macro:\r\n" +
                                     " 1. Log into gtpstratus.com\r\n" +
                                     " 2. Switch to the company you want to publish to\r\n" +
-                                    "    (this is only relevant if you have a Sandbox company)\r\n" +
+                                    "      (relevant if you have a Sandbox company)\r\n" +
                                     " 3. In Revit, go to the Add-Ins ribbon tab, then click\r\n" +
                                     "      Help (drop down) -> Sign Out\r\n" +
                                     " 4. In Revit, go to the Add-Ins ribbon tab, then click\r\n" +
@@ -136,8 +231,8 @@ namespace Utilities
             RelinquishOptions relinquishOptions = new RelinquishOptions(true); // relinquish everything
             TransactWithCentralOptions transactOptions = new TransactWithCentralOptions();
             syncOptions.SetRelinquishOptions(relinquishOptions);
-            doc.Save();
             doc.SynchronizeWithCentral(transactOptions, syncOptions);
+            doc.Save();
          }
        }
        catch (Exception ex)
@@ -162,7 +257,8 @@ namespace Utilities
           SetThreadExecutionState(1); // no longer try to keep the computer from sleeping
         }
      }
-	    
+
+     // From a log-line, get the DateTime stamp on it
      private DateTime GetDateTime(string line, DateTime def)
      {
      	if (string.IsNullOrEmpty(line))
@@ -216,13 +312,13 @@ namespace Utilities
                	  }
                   if (line.Contains("IN SILENT MODE"))
                   {
-                  	 silentLine = line;
+                     silentLine = line;
                      silent = true;
                	     break;
                   }
                   if (line.Contains("ERROR"))
                   {
-                  	 errorMsg += line + "\r\n";
+                     errorMsg += line + "\r\n";
                   }
                }
             }
@@ -237,7 +333,7 @@ namespace Utilities
          {
             msgBoxShown = true;
             silentLine += "\r\n\r\n" + log;
-         	MessageBox.Show(silentLine, "Silent Publish Success: " + name);
+            MessageBox.Show(silentLine, "Silent Publish Success: " + name);
          }
        }
        catch (Exception ex)
